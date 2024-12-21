@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-
+# Lớp này được sử dụng để xử lý dữ liệu đầu ra của các lớp Attention trong kiến trúc Transformer.
 class PointWiseFeedForward(torch.nn.Module):
     def __init__(self, hidden_units, dropout_rate):
 
@@ -19,10 +19,6 @@ class PointWiseFeedForward(torch.nn.Module):
         outputs += inputs
         return outputs
 
-# pls use the following self-made multihead attention layer
-# in case your pytorch version is below 1.16 or for other reasons
-# https://github.com/pmixer/TiSASRec.pytorch/blob/master/model.py
-
 class SASRec(torch.nn.Module):
     def __init__(self, user_num, item_num, args):
         super(SASRec, self).__init__()
@@ -31,8 +27,6 @@ class SASRec(torch.nn.Module):
         self.item_num = item_num
         self.dev = args.device
 
-        # TODO: loss += args.l2_emb for regularizing embedding vectors during training
-        # https://stackoverflow.com/questions/42704283/adding-l1-l2-regularization-in-pytorch
         self.item_emb = torch.nn.Embedding(self.item_num+1, args.hidden_units, padding_idx=0)
         self.pos_emb = torch.nn.Embedding(args.maxlen+1, args.hidden_units, padding_idx=0)
         self.emb_dropout = torch.nn.Dropout(p=args.dropout_rate)
@@ -59,14 +53,18 @@ class SASRec(torch.nn.Module):
             new_fwd_layer = PointWiseFeedForward(args.hidden_units, args.dropout_rate)
             self.forward_layers.append(new_fwd_layer)
 
-            # self.pos_sigmoid = torch.nn.Sigmoid()
-            # self.neg_sigmoid = torch.nn.Sigmoid()
 
-    def log2feats(self, log_seqs): # TODO: fp64 and int64 as default in python, trim?
+    def log2feats(self, log_seqs): 
         seqs = self.item_emb(torch.LongTensor(log_seqs).to(self.dev))
         seqs *= self.item_emb.embedding_dim ** 0.5
+
+        # Chạy test
+        # poss = torch.LongTensor(np.tile(np.arange(1, log_seqs.shape[1] + 1), [log_seqs.shape[0], 1])).to(self.dev)
+
+
+        # Huấn luyện
         poss = np.tile(np.arange(1, log_seqs.shape[1] + 1), [log_seqs.shape[0], 1])
-        # TODO: directly do tensor = torch.arange(1, xxx, device='cuda') to save extra overheads
+
         poss *= (log_seqs != 0)
         seqs += self.pos_emb(torch.LongTensor(poss).to(self.dev))
         seqs = self.emb_dropout(seqs)
@@ -79,7 +77,7 @@ class SASRec(torch.nn.Module):
             Q = self.attention_layernorms[i](seqs)
             mha_outputs, _ = self.attention_layers[i](Q, seqs, seqs, 
                                             attn_mask=attention_mask)
-                                            # need_weights=False) this arg do not work?
+                                           
             seqs = Q + mha_outputs
             seqs = torch.transpose(seqs, 0, 1)
 
@@ -105,14 +103,12 @@ class SASRec(torch.nn.Module):
         return pos_logits, neg_logits # pos_pred, neg_pred
 
     def predict(self, user_ids, log_seqs, item_indices): # for inference
-        log_feats = self.log2feats(log_seqs) # user_ids hasn't been used yet
+        log_feats = self.log2feats(log_seqs) 
 
         final_feat = log_feats[:, -1, :] # only use last QKV classifier, a waste
 
         item_embs = self.item_emb(torch.LongTensor(item_indices).to(self.dev)) # (U, I, C)
 
         logits = item_embs.matmul(final_feat.unsqueeze(-1)).squeeze(-1)
-
-        # preds = self.pos_sigmoid(logits) # rank same item list for different users
 
         return logits # preds # (U, I)
