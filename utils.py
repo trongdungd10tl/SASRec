@@ -35,12 +35,7 @@ def random_neq(l, r, s):
 def sample_function(user_train, usernum, itemnum, batch_size, maxlen, result_queue, SEED):
     def sample(uid):
         # uid = np.random.randint(1, usernum + 1)
-
-        while uid not in user_train or len(user_train[uid]) <= 1:
-            uid = np.random.randint(1, usernum + 1)
-
-
-        # while len(user_train[uid]) <= 1: user = np.random.randint(1, usernum + 1) # Kiểm tra liệu người dùng có đủ lịch sử tương tác (hơn 1 mục). Nếu không, một ID người dùng khác sẽ được chọn ngẫu nhiên.
+        while len(user_train[uid]) <= 1: user = np.random.randint(1, usernum + 1)
 
         seq = np.zeros([maxlen], dtype=np.int32)  # mảng chứa chuỗi lịch sử của người dùng với độ dài cố định maxlen
         pos = np.zeros([maxlen], dtype=np.int32)  # mảng chứa mục tiêu dự đoán tại mỗi bước thời gian
